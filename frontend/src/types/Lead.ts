@@ -2,8 +2,10 @@ export interface Lead {
   id: number;
   name: string;
   email: string;
-  phone: string;
-  message: string;
+  phone: number;
+  company: string;
+  source: string;
   status: string;
-  created_at: string;
+  value: number;
+  lastContact: string;
 }

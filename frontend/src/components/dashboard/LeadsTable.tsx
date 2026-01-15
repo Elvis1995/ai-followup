@@ -76,7 +76,7 @@ const LeadsTable = ({ leads, compact = false }: LeadsTableProps) => {
                 </TableCell>
 
                 <TableCell className="text-muted-foreground text-sm">
-                  {formatDate(lead.created_at)}
+                  {/* {formatDate(lead.created_at)} */}
                 </TableCell>
 
                 <TableCell>

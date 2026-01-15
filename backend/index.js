@@ -54,6 +54,34 @@ app.post("/leads", async (req, res) => {
   }
 });
 
+app.get("/stats", async (req, res) => {
+  try {
+    const totalResult = await pool.query(`SELECT COUNT(*) FROM leads`);
+
+    const todayResult = await pool.query(`
+      SELECT COUNT(*) 
+      FROM leads 
+      WHERE created_at >= CURRENT_DATE
+    `);
+
+    const weekResult = await pool.query(`
+      SELECT COUNT(*) 
+      FROM leads 
+      WHERE created_at >= NOW() - INTERVAL '7 days'
+    `);
+
+    res.json({
+      total: Number(totalResult.rows[0].count),
+      today: Number(todayResult.rows[0].count),
+      last7Days: Number(weekResult.rows[0].count),
+    });
+  } catch (err) {
+    console.error("Stats error:", err);
+    res.status(500).json({ error: "stats error" });
+  }
+});
+
+
 
 
 
