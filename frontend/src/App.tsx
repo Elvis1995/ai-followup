@@ -1,53 +1,113 @@
-import { useState } from "react";
-import LeadForm from "./components/LeadForm";
-import Dashboard from "./components/Dashboard";
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 
-export default function App() {
-  const [view, setView] = useState<"dashboard" | "form">("dashboard");
+// Pages
+import Landing from "./pages/Landing";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword";
+import Dashboard from "./pages/Dashboard";
+import Leads from "./pages/Leads";
+import Automation from "./pages/Automation";
+import CalendarPage from "./pages/CalendarPage";
+import Settings from "./pages/Settings";
+import NotFound from "./pages/NotFound";
 
+// Layout
+import DashboardLayout from "./components/dashboard/DashboardLayout";
+
+const queryClient = new QueryClient();
+
+// Protected route wrapper
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated } = useAuth();
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return <>{children}</>;
+};
+
+// Public route wrapper (redirect to dashboard if logged in)
+const PublicRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated } = useAuth();
+  
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return <>{children}</>;
+};
+
+const AppRoutes = () => {
   return (
-    <div className="flex h-screen bg-gray-100 font-sans">
-      {/* Sidebar */}
-      <aside className="w-56 bg-gray-900 text-white flex flex-col">
-        <div className="h-16 flex items-center justify-center text-2xl font-bold border-b border-gray-800">
-          AI FollowUp
-        </div>
-        <nav className="flex-1 p-4 space-y-2">
-          <button
-            className={`w-full text-left px-4 py-2 rounded hover:bg-gray-800 ${
-              view === "dashboard" ? "bg-gray-800" : ""
-            }`}
-            onClick={() => setView("dashboard")}
-          >
-            Dashboard
-          </button>
-          <button
-            className={`w-full text-left px-4 py-2 rounded hover:bg-gray-800 ${
-              view === "form" ? "bg-gray-800" : ""
-            }`}
-            onClick={() => setView("form")}
-          >
-            Skicka Lead
-          </button>
-        </nav>
-        <div className="p-4 border-t border-gray-800 text-sm text-gray-400">
-          v0.1 MVP
-        </div>
-      </aside>
+    <Routes>
+      {/* Public routes */}
+      <Route path="/" element={<Landing />} />
+      <Route
+        path="/login"
+        element={
+          <PublicRoute>
+            <Login />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/register"
+        element={
+          <PublicRoute>
+            <Register />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <PublicRoute>
+            <ForgotPassword />
+          </PublicRoute>
+        }
+      />
 
-      {/* Main content */}
-      <main className="flex-1 flex flex-col">
-        {/* Topbar */}
-        <div className="h-16 bg-white border-b border-gray-200 flex items-center px-6 justify-between shadow-sm">
-          <h1 className="text-xl font-semibold">{view === "dashboard" ? "Dashboard" : "Skicka Lead"}</h1>
-          {/* Här kan vi lägga till search / profil / logout */}
-        </div>
+      {/* Protected dashboard routes */}
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Dashboard />} />
+        <Route path="leads" element={<Leads />} />
+        <Route path="automation" element={<Automation />} />
+        <Route path="calendar" element={<CalendarPage />} />
+        <Route path="settings" element={<Settings />} />
+      </Route>
 
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-auto p-6">
-          {view === "dashboard" ? <Dashboard /> : <LeadForm />}
-        </div>
-      </main>
-    </div>
+      {/* Catch-all */}
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   );
-}
+};
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
+
+export default App;
