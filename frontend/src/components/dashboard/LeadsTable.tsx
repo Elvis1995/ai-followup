@@ -1,5 +1,6 @@
 import { Lead } from "@/types/Lead";
 import { leadStatusConfig } from "@/lib/mockData";
+import { useNavigate } from "react-router-dom";
 import {
   Table,
   TableBody,
@@ -25,6 +26,8 @@ interface LeadsTableProps {
 }
 
 const LeadsTable = ({ leads, compact = false }: LeadsTableProps) => {
+  const navigate = useNavigate();
+  
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
@@ -51,7 +54,11 @@ const LeadsTable = ({ leads, compact = false }: LeadsTableProps) => {
             const status = leadStatusConfig[lead.status] || leadStatusConfig["new"];
 
             return (
-              <TableRow key={lead.id} className="table-row-hover">
+              <TableRow 
+                  key={lead.id} 
+                  className="table-row-hover cursor-pointer"
+                  onClick={() => navigate(`/dashboard/leads/${lead.id}`)}
+                >
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-sm font-medium">

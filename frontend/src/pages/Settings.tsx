@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,14 @@ import {
 const Settings = () => {
   const { user } = useAuth();
   const [saved, setSaved] = useState(false);
+  const [customer, setCustomer] = useState<any>(null);
+
+  useEffect(() => {
+    fetch("http://localhost:3001/me")
+      .then(res => res.json())
+      .then(data => setCustomer(data));
+  }, []);
+
 
   const handleSave = () => {
     setSaved(true);
@@ -52,7 +60,7 @@ const Settings = () => {
       </div>
 
       <Tabs defaultValue="company" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-flex">
+        <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-flex">
           <TabsTrigger value="company" className="gap-2">
             <Building2 className="w-4 h-4" />
             <span className="hidden sm:inline">Company</span>
@@ -73,6 +81,10 @@ const Settings = () => {
             <CreditCard className="w-4 h-4" />
             <span className="hidden sm:inline">Billing</span>
           </TabsTrigger>
+          <TabsTrigger value="integrations" className="gap-2">🔌
+            <span className="hidden sm:inline">Integrations</span>
+          </TabsTrigger>
+
         </TabsList>
 
         {/* Company settings */}
@@ -381,6 +393,72 @@ const Settings = () => {
                 ))}
               </div>
             </div>
+          </div>
+        </TabsContent>
+        <TabsContent value="integrations" className="space-y-6">
+          <div className="p-6 rounded-xl border border-border bg-card space-y-6">
+            <h2 className="text-xl font-semibold">API Integration</h2>
+            <p className="text-sm text-muted-foreground">
+              Send leads from your website directly into the system using our webhook.
+            </p>
+
+            {!customer ? (
+              <div>Loading...</div>
+            ) : (
+              <>
+                {(() => {
+                  const webhookUrl = `http://localhost:3001/webhook/${customer.api_key}`;
+
+                  return (
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <Label>Your API Key</Label>
+                        <div className="flex gap-2">
+                          <Input value={customer.api_key} readOnly />
+                          <Button
+                            variant="outline"
+                            onClick={() => navigator.clipboard.writeText(customer.api_key)}
+                          >
+                            Copy
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Webhook URL</Label>
+                        <div className="flex gap-2">
+                          <Input value={webhookUrl} readOnly />
+                          <Button
+                            variant="outline"
+                            onClick={() => navigator.clipboard.writeText(webhookUrl)}
+                          >
+                            Copy
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Example (JavaScript)</Label>
+                        <pre className="bg-muted p-4 rounded-lg text-sm overflow-auto">
+                        {`fetch("${webhookUrl}", {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json"
+                          },
+                          body: JSON.stringify({
+                            name: "John Doe",
+                            email: "john@test.com",
+                            phone: "0701234567",
+                            message: "I want a quote"
+                          })
+                          });`}
+                            </pre>
+                          </div>
+                        </div>
+                      );
+                  })()}
+              </>
+            )}
           </div>
         </TabsContent>
       </Tabs>

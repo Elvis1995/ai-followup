@@ -12,6 +12,7 @@ import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
+import LeadDetail from "./pages/LeadDetail";
 import Automation from "./pages/Automation";
 import CalendarPage from "./pages/CalendarPage";
 import Settings from "./pages/Settings";
@@ -89,6 +90,14 @@ const AppRoutes = () => {
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="settings" element={<Settings />} />
       </Route>
+
+      <Route
+        path="/dashboard"
+        element={<DashboardLayout />}
+      >
+        <Route path="leads/:id" element={<LeadDetail />} />
+      </Route>
+
 
       {/* Catch-all */}
       <Route path="*" element={<NotFound />} />
