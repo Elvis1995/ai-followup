@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Building2,
   Mail,
@@ -15,32 +15,59 @@ import {
   CreditCard,
   Save,
   CheckCircle,
-} from 'lucide-react';
+} from "lucide-react";
+
+type Customer = {
+  id: string;
+  name?: string;
+  company_name?: string;
+  api_key: string;
+  created_at?: string;
+};
 
 const Settings = () => {
   const { user } = useAuth();
   const [saved, setSaved] = useState(false);
-  const [customer, setCustomer] = useState<any>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [loadingCustomer, setLoadingCustomer] = useState(true);
+  const [customerError, setCustomerError] = useState<string | null>(null);
 
   useEffect(() => {
-  fetch("http://localhost:3001/me")
-    .then(res => res.json())
-    .then(data => {
-      const c = data.customer || data; // fallback om du råkar returnera customer direkt
-      setCustomer(c);
+    (async () => {
+      try {
+        setLoadingCustomer(true);
+        setCustomerError(null);
 
-      if (c?.api_key) {
-        localStorage.setItem("apiKey", c.api_key);
+        const res = await fetch("http://localhost:3001/me");
+        const data = await res.json();
+
+        if (!res.ok || data?.success === false) {
+          throw new Error(data?.error || `Failed to load /me (${res.status})`);
+        }
+
+        const c: Customer = data.customer || data; // stödjer både {customer:...} och direkt-object
+        setCustomer(c);
+
+        if (c?.api_key) {
+          localStorage.setItem("apiKey", c.api_key);
+        }
+      } catch (e: any) {
+        setCustomerError(e.message);
+      } finally {
+        setLoadingCustomer(false);
       }
-    });
+    })();
   }, []);
-
-
 
   const handleSave = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
+
+  const webhookSource = "website";
+  const webhookUrl = `http://localhost:3001/webhook/${webhookSource}`;
+
+  const apiKey = customer?.api_key || "";
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -89,10 +116,9 @@ const Settings = () => {
             <CreditCard className="w-4 h-4" />
             <span className="hidden sm:inline">Billing</span>
           </TabsTrigger>
-          <TabsTrigger value="integrations" className="gap-2">🔌
-            <span className="hidden sm:inline">Integrations</span>
+          <TabsTrigger value="integrations" className="gap-2">
+            🔌 <span className="hidden sm:inline">Integrations</span>
           </TabsTrigger>
-
         </TabsList>
 
         {/* Company settings */}
@@ -113,11 +139,7 @@ const Settings = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="taxId">Tax ID / VAT Number</Label>
-                  <Input
-                    id="taxId"
-                    placeholder="XX-XXXXXXX"
-                    className="h-12"
-                  />
+                  <Input id="taxId" placeholder="XX-XXXXXXX" className="h-12" />
                 </div>
 
                 <div className="space-y-2">
@@ -132,11 +154,15 @@ const Settings = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="postalCode">Postal Code</Label>
-                    <Input id="postalCode" placeholder="12345" className="h-12" />
+                    <Input
+                      id="postalCode"
+                      placeholder="12345"
+                      className="h-12"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="city">City</Label>
-                    <Input id="city" placeholder="New York" className="h-12" />
+                    <Input id="city" placeholder="Stockholm" className="h-12" />
                   </div>
                 </div>
               </div>
@@ -170,7 +196,7 @@ const Settings = () => {
                   <Input
                     id="contactPhone"
                     type="tel"
-                    placeholder="+1 555 123 4567"
+                    placeholder="+46 70 123 45 67"
                     className="h-12"
                   />
                 </div>
@@ -190,7 +216,9 @@ const Settings = () => {
                 </div>
                 <div>
                   <h2 className="font-semibold">Email</h2>
-                  <p className="text-sm text-muted-foreground">Sender settings</p>
+                  <p className="text-sm text-muted-foreground">
+                    Sender settings
+                  </p>
                 </div>
               </div>
 
@@ -225,7 +253,7 @@ const Settings = () => {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Sender Number</Label>
-                  <Input defaultValue="+1 555 000 0000" className="h-10" />
+                  <Input defaultValue="+46 70 000 00 00" className="h-10" />
                 </div>
                 <div className="space-y-2">
                   <Label>Sender Name (if supported)</Label>
@@ -246,7 +274,9 @@ const Settings = () => {
                 </div>
                 <div>
                   <h2 className="font-semibold">WhatsApp</h2>
-                  <p className="text-sm text-muted-foreground">WhatsApp Business</p>
+                  <p className="text-sm text-muted-foreground">
+                    WhatsApp Business
+                  </p>
                 </div>
               </div>
 
@@ -276,28 +306,28 @@ const Settings = () => {
             <div className="space-y-4">
               {[
                 {
-                  title: 'New leads',
-                  description: 'Get notified when a new lead comes in',
+                  title: "New leads",
+                  description: "Get notified when a new lead comes in",
                   defaultChecked: true,
                 },
                 {
-                  title: 'Booked meetings',
-                  description: 'Notification when AI books a meeting',
+                  title: "Booked meetings",
+                  description: "Notification when AI books a meeting",
                   defaultChecked: true,
                 },
                 {
-                  title: 'Follow-up status',
-                  description: 'Daily summary of follow-ups',
+                  title: "Follow-up status",
+                  description: "Daily summary of follow-ups",
                   defaultChecked: true,
                 },
                 {
-                  title: 'Failed deliveries',
-                  description: 'Notification if email/SMS could not be delivered',
+                  title: "Failed deliveries",
+                  description: "Notification if email/SMS could not be delivered",
                   defaultChecked: true,
                 },
                 {
-                  title: 'Weekly report',
-                  description: 'Weekly summary of activity',
+                  title: "Weekly report",
+                  description: "Weekly summary of activity",
                   defaultChecked: false,
                 },
               ].map((item, index) => (
@@ -346,8 +376,8 @@ const Settings = () => {
 
               <div className="p-4 rounded-lg bg-muted/50">
                 <p className="text-sm text-muted-foreground mb-4">
-                  Add an extra layer of security to your account with
-                  two-factor authentication.
+                  Add an extra layer of security to your account with two-factor
+                  authentication.
                 </p>
                 <Button variant="outline">Enable 2FA</Button>
               </div>
@@ -388,7 +418,7 @@ const Settings = () => {
             <div className="p-6 rounded-xl border border-border bg-card space-y-4">
               <h2 className="text-xl font-semibold">Billing history</h2>
               <div className="space-y-2">
-                {['Jan 2024', 'Dec 2023', 'Nov 2023'].map((month) => (
+                {["Jan 2024", "Dec 2023", "Nov 2023"].map((month) => (
                   <div
                     key={month}
                     className="flex items-center justify-between py-2 border-b border-border last:border-0"
@@ -403,6 +433,8 @@ const Settings = () => {
             </div>
           </div>
         </TabsContent>
+
+        {/* Integrations */}
         <TabsContent value="integrations" className="space-y-6">
           <div className="p-6 rounded-xl border border-border bg-card space-y-6">
             <h2 className="text-xl font-semibold">API Integration</h2>
@@ -410,63 +442,66 @@ const Settings = () => {
               Send leads from your website directly into the system using our webhook.
             </p>
 
-            {!customer ? (
+            {loadingCustomer ? (
               <div>Loading...</div>
+            ) : customerError ? (
+              <div className="text-destructive">Error: {customerError}</div>
+            ) : !customer ? (
+              <div>No customer found.</div>
             ) : (
-              <>
-                {(() => {
-                  const webhookUrl = `http://localhost:3001/webhook/website`;
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <Label>Your API Key</Label>
+                  <div className="flex gap-2">
+                    <Input value={apiKey} readOnly />
+                    <Button
+                      variant="outline"
+                      onClick={() => navigator.clipboard.writeText(apiKey)}
+                      disabled={!apiKey}
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    (We also store this automatically in your browser for the dashboard.)
+                  </p>
+                </div>
 
-                  return (
-                    <div className="space-y-6">
-                      <div className="space-y-2">
-                        <Label>Your API Key</Label>
-                        <div className="flex gap-2">
-                          <Input value={customer.api_key} readOnly />
-                          <Button
-                            variant="outline"
-                            onClick={() => navigator.clipboard.writeText(customer.api_key)}
-                          >
-                            Copy
-                          </Button>
-                        </div>
-                      </div>
+                <div className="space-y-2">
+                  <Label>Webhook URL</Label>
+                  <div className="flex gap-2">
+                    <Input value={webhookUrl} readOnly />
+                    <Button
+                      variant="outline"
+                      onClick={() => navigator.clipboard.writeText(webhookUrl)}
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Use <b>website</b> as source for now. Later we’ll let you create multiple sources.
+                  </p>
+                </div>
 
-                      <div className="space-y-2">
-                        <Label>Webhook URL</Label>
-                        <div className="flex gap-2">
-                          <Input value={webhookUrl} readOnly />
-                          <Button
-                            variant="outline"
-                            onClick={() => navigator.clipboard.writeText(webhookUrl)}
-                          >
-                            Copy
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Example (JavaScript)</Label>
-                        <pre className="bg-muted p-4 rounded-lg text-sm overflow-auto">
-                        {`fetch("${webhookUrl}", {
-                                method: "POST",
-                                headers: {
-                                  "Content-Type": "application/json",
-                                  "x-api-key": "${customer.api_key}"
-                                },
-                                body: JSON.stringify({
-                                  name: "John Doe",
-                                  email: "john@test.com",
-                                  phone: "0701234567",
-                                  message: "I want a quote"
-                                })
-                              });`}
-                            </pre>
-                          </div>
-                        </div>
-                      );
-                  })()}
-              </>
+                <div className="space-y-2">
+                  <Label>Example (JavaScript)</Label>
+                  <pre className="bg-muted p-4 rounded-lg text-sm overflow-auto">
+{`fetch("${webhookUrl}", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "x-api-key": "${apiKey}"
+  },
+  body: JSON.stringify({
+    name: "John Doe",
+    email: "john@test.com",
+    phone: "0701234567",
+    message: "I want a quote"
+  })
+});`}
+                  </pre>
+                </div>
+              </div>
             )}
           </div>
         </TabsContent>
