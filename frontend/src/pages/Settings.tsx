@@ -23,10 +23,18 @@ const Settings = () => {
   const [customer, setCustomer] = useState<any>(null);
 
   useEffect(() => {
-    fetch("http://localhost:3001/me")
-      .then(res => res.json())
-      .then(data => setCustomer(data));
+  fetch("http://localhost:3001/me")
+    .then(res => res.json())
+    .then(data => {
+      const c = data.customer || data; // fallback om du råkar returnera customer direkt
+      setCustomer(c);
+
+      if (c?.api_key) {
+        localStorage.setItem("apiKey", c.api_key);
+      }
+    });
   }, []);
+
 
 
   const handleSave = () => {
@@ -407,7 +415,7 @@ const Settings = () => {
             ) : (
               <>
                 {(() => {
-                  const webhookUrl = `http://localhost:3001/webhook/${customer.api_key}`;
+                  const webhookUrl = `http://localhost:3001/webhook/website`;
 
                   return (
                     <div className="space-y-6">
@@ -441,17 +449,18 @@ const Settings = () => {
                         <Label>Example (JavaScript)</Label>
                         <pre className="bg-muted p-4 rounded-lg text-sm overflow-auto">
                         {`fetch("${webhookUrl}", {
-                          method: "POST",
-                          headers: {
-                            "Content-Type": "application/json"
-                          },
-                          body: JSON.stringify({
-                            name: "John Doe",
-                            email: "john@test.com",
-                            phone: "0701234567",
-                            message: "I want a quote"
-                          })
-                          });`}
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  "x-api-key": "${customer.api_key}"
+                                },
+                                body: JSON.stringify({
+                                  name: "John Doe",
+                                  email: "john@test.com",
+                                  phone: "0701234567",
+                                  message: "I want a quote"
+                                })
+                              });`}
                             </pre>
                           </div>
                         </div>

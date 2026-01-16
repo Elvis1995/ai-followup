@@ -1,10 +1,19 @@
 import { useEffect, useState } from "react";
-import { Users, MessageSquare, Calendar, TrendingUp, Zap, Clock, ArrowUpRight } from 'lucide-react';
-import StatCard from '@/components/dashboard/StatCard';
-import LeadsTable from '@/components/dashboard/LeadsTable';
-import { Button } from '@/components/ui/button';
-import { Link } from 'react-router-dom';
-import { Lead } from '@/types/Lead';
+import {
+  Users,
+  MessageSquare,
+  Calendar,
+  TrendingUp,
+  Zap,
+  Clock,
+  ArrowUpRight,
+} from "lucide-react";
+import StatCard from "@/components/dashboard/StatCard";
+import LeadsTable from "@/components/dashboard/LeadsTable";
+import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
+import { Lead } from "@/types/Lead";
+import { apiFetch } from "@/lib/api";
 
 interface Stats {
   total: number;
@@ -15,30 +24,29 @@ interface Stats {
 const Dashboard = () => {
   const [stats, setStats] = useState<Stats | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-  fetch("http://localhost:3001/stats")
-    .then(res => res.json())
-    .then(data => setStats(data));
+    (async () => {
+      try {
+        setError(null);
 
-  fetch("http://localhost:3001/leads")
-    .then(res => res.json())
-    .then(data => {
-      const mapped = data.leads.map((l: any) => ({
-        id: l.id,
-        name: l.name,
-        email: l.email,
-        company: "—",
-        source: "Website",
-        status: l.status,
-        value: 0,
-        phone: l.phone,
-        lastContact: l.created_at,
-      }));
-      setLeads(mapped);
-    });
-}, []);
+        const statsData = await apiFetch("/stats");
+        // backend returnerar { success:true, total,today,last7Days }
+        setStats({
+          total: statsData.total ?? 0,
+          today: statsData.today ?? 0,
+          last7Days: statsData.last7Days ?? 0,
+        });
 
+        const leadsData = await apiFetch("/leads");
+        // leadsData = { success:true, leads:[...] }
+        setLeads(leadsData.leads || []);
+      } catch (e: any) {
+        setError(e.message);
+      }
+    })();
+  }, []);
 
   const recentLeads = leads.slice(0, 5);
 
@@ -57,6 +65,15 @@ const Dashboard = () => {
           Create new flow
         </Button>
       </div>
+
+      {error && (
+        <div className="p-4 rounded-xl border border-destructive/30 bg-destructive/5 text-destructive">
+          Error: {error}
+          <div className="text-sm text-muted-foreground mt-1">
+            (Kolla att apiKey finns i localStorage och att backend kör.)
+          </div>
+        </div>
+      )}
 
       {/* Stats grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
