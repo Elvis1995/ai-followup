@@ -405,5 +405,314 @@ app.get("/leads/:id/activity", requireApiKey, async (req, res) => {
   }
 });
 
+// ---------------- Automation API (tenant-safe) ----------------
+
+// GET /automation/flows  (inkl steps)
+app.get("/automation/flows", requireApiKey, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        f.*,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', s.id,
+              'flow_id', s.flow_id,
+              'step_order', s.step_order,
+              'type', s.type,
+              'delay_minutes', s.delay_minutes,
+              'config', s.config
+            )
+            ORDER BY s.step_order ASC
+          ) FILTER (WHERE s.id IS NOT NULL),
+          '[]'::json
+        ) AS steps
+      FROM automation_flows f
+      LEFT JOIN automation_steps s ON s.flow_id = f.id
+      WHERE f.customer_id = $1
+      GROUP BY f.id
+      ORDER BY f.created_at DESC
+      `,
+      [req.customer.id]
+    );
+
+    res.json({ success: true, flows: result.rows });
+  } catch (err) {
+    console.error("Get flows error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /automation/flows
+app.post("/automation/flows", requireApiKey, async (req, res) => {
+  const { name, trigger = "new_lead", is_active = true } = req.body || {};
+
+  if (!name?.trim()) {
+    return res.status(400).json({ success: false, error: "Missing name" });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      INSERT INTO automation_flows (customer_id, name, trigger, is_active, created_at)
+      VALUES ($1, $2, $3, $4, NOW())
+      RETURNING *
+      `,
+      [req.customer.id, name.trim(), trigger, !!is_active]
+    );
+
+    res.json({ success: true, flow: result.rows[0] });
+  } catch (err) {
+    console.error("Create flow error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /automation/flows/:id
+app.put("/automation/flows/:id", requireApiKey, async (req, res) => {
+  const { id } = req.params;
+  const { name, trigger, is_active } = req.body || {};
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE automation_flows
+      SET
+        name = COALESCE($1, name),
+        trigger = COALESCE($2, trigger),
+        is_active = COALESCE($3, is_active)
+      WHERE id = $4 AND customer_id = $5
+      RETURNING *
+      `,
+      [
+        name ?? null,
+        trigger ?? null,
+        typeof is_active === "boolean" ? is_active : null,
+        id,
+        req.customer.id,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: "Flow not found" });
+    }
+
+    res.json({ success: true, flow: result.rows[0] });
+  } catch (err) {
+    console.error("Update flow error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /automation/flows/:id (tar steps först)
+app.delete("/automation/flows/:id", requireApiKey, async (req, res) => {
+  const { id } = req.params;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const flowRes = await client.query(
+      `SELECT id FROM automation_flows WHERE id = $1 AND customer_id = $2`,
+      [id, req.customer.id]
+    );
+    if (flowRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ success: false, error: "Flow not found" });
+    }
+
+    await client.query(`DELETE FROM automation_steps WHERE flow_id = $1`, [id]);
+    await client.query(`DELETE FROM automation_flows WHERE id = $1 AND customer_id = $2`, [
+      id,
+      req.customer.id,
+    ]);
+
+    await client.query("COMMIT");
+    res.json({ success: true });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Delete flow error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /automation/flows/:id/steps
+app.get("/automation/flows/:id/steps", requireApiKey, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT s.*
+      FROM automation_steps s
+      JOIN automation_flows f ON f.id = s.flow_id
+      WHERE s.flow_id = $1 AND f.customer_id = $2
+      ORDER BY s.step_order ASC
+      `,
+      [id, req.customer.id]
+    );
+
+    res.json({ success: true, steps: result.rows });
+  } catch (err) {
+    console.error("Get steps error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /automation/flows/:id/steps (append sist)
+app.post("/automation/flows/:id/steps", requireApiKey, async (req, res) => {
+  const { id } = req.params;
+  const { type, delay_minutes = 0, config = {} } = req.body || {};
+
+  if (!type) return res.status(400).json({ success: false, error: "Missing type" });
+
+  try {
+    const flowRes = await pool.query(
+      `SELECT id FROM automation_flows WHERE id = $1 AND customer_id = $2`,
+      [id, req.customer.id]
+    );
+    if (flowRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: "Flow not found" });
+    }
+
+    const orderRes = await pool.query(
+      `SELECT COALESCE(MAX(step_order), 0) AS max_order FROM automation_steps WHERE flow_id = $1`,
+      [id]
+    );
+    const nextOrder = Number(orderRes.rows[0].max_order) + 1;
+
+    const result = await pool.query(
+      `
+      INSERT INTO automation_steps (flow_id, step_order, type, delay_minutes, config)
+      VALUES ($1, $2, $3, $4, $5::jsonb)
+      RETURNING *
+      `,
+      [id, nextOrder, type, Number(delay_minutes || 0), JSON.stringify(config || {})]
+    );
+
+    res.json({ success: true, step: result.rows[0] });
+  } catch (err) {
+    console.error("Create step error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /automation/steps/:id
+app.put("/automation/steps/:id", requireApiKey, async (req, res) => {
+  const { id } = req.params;
+  const { type, delay_minutes, config } = req.body || {};
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE automation_steps s
+      SET
+        type = COALESCE($1, s.type),
+        delay_minutes = COALESCE($2, s.delay_minutes),
+        config = COALESCE($3::jsonb, s.config)
+      FROM automation_flows f
+      WHERE s.id = $4 AND s.flow_id = f.id AND f.customer_id = $5
+      RETURNING s.*
+      `,
+      [
+        type ?? null,
+        typeof delay_minutes === "number" ? delay_minutes : null,
+        config ? JSON.stringify(config) : null,
+        id,
+        req.customer.id,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: "Step not found" });
+    }
+
+    res.json({ success: true, step: result.rows[0] });
+  } catch (err) {
+    console.error("Update step error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /automation/steps/:id
+app.delete("/automation/steps/:id", requireApiKey, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `
+      DELETE FROM automation_steps s
+      USING automation_flows f
+      WHERE s.id = $1 AND s.flow_id = f.id AND f.customer_id = $2
+      RETURNING s.*
+      `,
+      [id, req.customer.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: "Step not found" });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete step error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /automation/flows/:id/steps/reorder
+app.post("/automation/flows/:id/steps/reorder", requireApiKey, async (req, res) => {
+  const { id } = req.params;
+  const { orderedStepIds } = req.body || {};
+
+  if (!Array.isArray(orderedStepIds) || orderedStepIds.length === 0) {
+    return res.status(400).json({ success: false, error: "orderedStepIds required" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const flowRes = await client.query(
+      `SELECT id FROM automation_flows WHERE id = $1 AND customer_id = $2`,
+      [id, req.customer.id]
+    );
+    if (flowRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ success: false, error: "Flow not found" });
+    }
+
+    const stepsRes = await client.query(`SELECT id FROM automation_steps WHERE flow_id = $1`, [id]);
+    const allowed = new Set(stepsRes.rows.map((r) => r.id));
+    for (const stepId of orderedStepIds) {
+      if (!allowed.has(stepId)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ success: false, error: "Invalid step id in reorder" });
+      }
+    }
+
+    for (let i = 0; i < orderedStepIds.length; i++) {
+      await client.query(`UPDATE automation_steps SET step_order = $1 WHERE id = $2`, [
+        i + 1,
+        orderedStepIds[i],
+      ]);
+    }
+
+    await client.query("COMMIT");
+    res.json({ success: true });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Reorder steps error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log("Backend running on port " + PORT));
